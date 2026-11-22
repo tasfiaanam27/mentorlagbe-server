@@ -11,6 +11,7 @@ import applicationRoutes from "./routes/applications.js";
 import stripeRoutes, {
   createStripeWebhookHandler,
 } from "./routes/stripe.js";
+import dashboardRoutes from "./routes/dashboard.js";
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ const startServer = async () => {
     app.all("/api/auth/*", toNodeHandler(auth));
 
     app.use(express.json());
+    app.use("/api/dashboard", dashboardRoutes(auth));
 
     // Root route
     app.get("/", (req, res) => {
