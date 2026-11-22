@@ -15,6 +15,7 @@ export const createAuth = () => {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
+      autoSignIn: true,
     },
 
     user: {

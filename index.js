@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { toNodeHandler } from "better-auth/node";
 import { connectDB } from "./config/db.js";
 import { createAuth } from "./config/auth.js";
+import tuitionRoutes from "./routes/tuitions.js";
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ const startServer = async () => {
     app.all("/api/auth/*", toNodeHandler(auth));
 
     app.use(express.json());
+    app.use("/api/tuitions", tuitionRoutes);
 
     app.get("/", (req, res) => {
       res.send("Welcome to MentorLagbe API!");
