@@ -5,18 +5,17 @@ import { getDB } from "../config/db.js";
 
 const router = express.Router();
 
-// Reusable BetterAuth session verification
-const getAuthenticatedUser = async (req, auth) => {
+async function getAuthenticatedUser(req, auth) {
   const session = await auth.api.getSession({
     headers: fromNodeHeaders(req.headers),
   });
 
   return session?.user || null;
-};
+}
 
-// POST /api/applications
-// Submit a tuition application
 export default function applicationRoutes(auth) {
+  // POST /api/applications
+  // Submit a tuition application
   router.post("/", async (req, res) => {
     try {
       const user = await getAuthenticatedUser(req, auth);
@@ -46,7 +45,8 @@ export default function applicationRoutes(auth) {
         !tuitionId ||
         !ObjectId.isValid(tuitionId) ||
         !studentPhone?.trim() ||
-        !preferredSchedule?.trim()
+        !preferredSchedule?.trim() ||
+        typeof studentNote !== "string"
       ) {
         return res.status(400).json({
           success: false,
@@ -72,6 +72,7 @@ export default function applicationRoutes(auth) {
 
       const studentEmail = user.email.toLowerCase();
 
+      // Prevent duplicate applications
       const existingApplication = await db.collection("applications").findOne({
         tuitionId: tuition._id.toString(),
         studentEmail,
@@ -120,7 +121,7 @@ export default function applicationRoutes(auth) {
   });
 
   // GET /api/applications/my-applications
-  // Get applications belonging to the logged-in student
+  // Fetch all applications belonging to the logged-in student
   router.get("/my-applications", async (req, res) => {
     try {
       const user = await getAuthenticatedUser(req, auth);
@@ -149,10 +150,42 @@ export default function applicationRoutes(auth) {
         .sort({ appliedAt: -1 })
         .toArray();
 
+      // Retrieve the registered tutor names and emails.
+      const tutorEmails = [
+        ...new Set(
+          applications
+            .map((application) => application.tutorEmail?.toLowerCase())
+            .filter(Boolean)
+        ),
+      ];
+
+      const tutors = tutorEmails.length
+        ? await db
+            .collection("users")
+            .find(
+              { email: { $in: tutorEmails } },
+              { projection: { name: 1, email: 1 } }
+            )
+            .toArray()
+        : [];
+
+      const tutorNameMap = new Map(
+        tutors.map((tutor) => [
+          tutor.email.toLowerCase(),
+          tutor.name,
+        ])
+      );
+
+      const applicationsWithTutorNames = applications.map((application) => ({
+        ...application,
+        tutorName:
+          tutorNameMap.get(application.tutorEmail?.toLowerCase()) || "Tutor",
+      }));
+
       return res.status(200).json({
         success: true,
-        count: applications.length,
-        data: applications,
+        count: applicationsWithTutorNames.length,
+        data: applicationsWithTutorNames,
       });
     } catch (error) {
       console.error("Fetch student applications error:", error);
@@ -165,7 +198,7 @@ export default function applicationRoutes(auth) {
   });
 
   // DELETE /api/applications/:id
-  // Cancel an application only if it belongs to the student and is pending
+  // Cancel only the logged-in student's pending application
   router.delete("/:id", async (req, res) => {
     try {
       const user = await getAuthenticatedUser(req, auth);
@@ -225,4 +258,3 @@ export default function applicationRoutes(auth) {
 
   return router;
 }
-
