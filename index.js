@@ -5,15 +5,18 @@ import { toNodeHandler } from "better-auth/node";
 import { connectDB } from "./config/db.js";
 import { createAuth } from "./config/auth.js";
 import tuitionRoutes from "./routes/tuitions.js";
+import applicationRoutes from "./routes/applications.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors({
-  origin: process.env.CLIENT_URL,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  })
+);
 
 const PORT = process.env.PORT || 5000;
 
@@ -27,7 +30,6 @@ const startServer = async () => {
     app.all("/api/auth/*", toNodeHandler(auth));
 
     app.use(express.json());
-    app.use("/api/tuitions", tuitionRoutes);
 
     app.get("/", (req, res) => {
       res.send("Welcome to MentorLagbe API!");
@@ -40,6 +42,9 @@ const startServer = async () => {
       });
     });
 
+    app.use("/api/tuitions", tuitionRoutes);
+    app.use("/api/applications", applicationRoutes(auth));
+
     app.listen(PORT, () => {
       console.log(`MentorLagbe server running on port ${PORT}`);
     });
@@ -50,3 +55,4 @@ const startServer = async () => {
 };
 
 startServer();
+
