@@ -1,11 +1,16 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import Stripe from "stripe";
 import { toNodeHandler } from "better-auth/node";
+
 import { connectDB, getDB } from "./config/db.js";
 import { createAuth } from "./config/auth.js";
 import tuitionRoutes from "./routes/tuitions.js";
 import applicationRoutes from "./routes/applications.js";
+import stripeRoutes, {
+  createStripeWebhookHandler,
+} from "./routes/stripe.js";
 
 dotenv.config();
 
@@ -24,9 +29,22 @@ const startServer = async () => {
   try {
     await connectDB();
 
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error("STRIPE_SECRET_KEY is missing from the server .env file.");
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const auth = createAuth();
 
-    // BetterAuth handler must come before express.json()
+    // Stripe webhook must be registered before express.json().
+    // Stripe signature verification requires the original raw request body.
+    app.post(
+      "/api/stripe/webhook",
+      express.raw({ type: "application/json" }),
+      createStripeWebhookHandler(stripe)
+    );
+
+    // BetterAuth handler must come before express.json().
     app.all("/api/auth/*", toNodeHandler(auth));
 
     app.use(express.json());
@@ -77,6 +95,9 @@ const startServer = async () => {
 
     // Application routes
     app.use("/api/applications", applicationRoutes(auth));
+
+    // Stripe Checkout and verification routes
+    app.use("/api/stripe", stripeRoutes(auth, stripe));
 
     app.listen(PORT, () => {
       console.log(`MentorLagbe server running on port ${PORT}`);
