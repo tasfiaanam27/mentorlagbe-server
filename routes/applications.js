@@ -5,24 +5,30 @@ import { getDB } from "../config/db.js";
 
 const router = express.Router();
 
+// Reusable BetterAuth session verification
+const getAuthenticatedUser = async (req, auth) => {
+  const session = await auth.api.getSession({
+    headers: fromNodeHeaders(req.headers),
+  });
+
+  return session?.user || null;
+};
+
+// POST /api/applications
+// Submit a tuition application
 export default function applicationRoutes(auth) {
-  // POST /api/applications
   router.post("/", async (req, res) => {
     try {
-      // Verify the logged-in user's BetterAuth session
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-      });
+      const user = await getAuthenticatedUser(req, auth);
 
-      if (!session?.user) {
+      if (!user) {
         return res.status(401).json({
           success: false,
           message: "Please sign in to apply for a tuition.",
         });
       }
 
-      // Only Students can apply
-      if (session.user.role !== "student") {
+      if (user.role !== "student") {
         return res.status(403).json({
           success: false,
           message: "Only students can apply for tuitions.",
@@ -44,13 +50,13 @@ export default function applicationRoutes(auth) {
       ) {
         return res.status(400).json({
           success: false,
-          message: "Please provide a valid tuition, phone number and preferred schedule.",
+          message:
+            "Please provide a valid tuition, phone number and preferred schedule.",
         });
       }
 
       const db = getDB();
 
-      // Find an approved and active tuition
       const tuition = await db.collection("tuitions").findOne({
         _id: new ObjectId(tuitionId),
         approvalStatus: "approved",
@@ -64,9 +70,8 @@ export default function applicationRoutes(auth) {
         });
       }
 
-      const studentEmail = session.user.email.toLowerCase();
+      const studentEmail = user.email.toLowerCase();
 
-      // Prevent duplicate applications
       const existingApplication = await db.collection("applications").findOne({
         tuitionId: tuition._id.toString(),
         studentEmail,
@@ -85,7 +90,7 @@ export default function applicationRoutes(auth) {
         subject: tuition.subject,
         monthlyFee: tuition.monthlyFee,
         tutorEmail: tuition.tutorEmail,
-        studentName: session.user.name,
+        studentName: user.name,
         studentEmail,
         studentPhone: studentPhone.trim(),
         preferredSchedule: preferredSchedule.trim(),
@@ -114,5 +119,110 @@ export default function applicationRoutes(auth) {
     }
   });
 
+  // GET /api/applications/my-applications
+  // Get applications belonging to the logged-in student
+  router.get("/my-applications", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req, auth);
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Please sign in to view your applications.",
+        });
+      }
+
+      if (user.role !== "student") {
+        return res.status(403).json({
+          success: false,
+          message: "Only students can view their applications.",
+        });
+      }
+
+      const db = getDB();
+
+      const applications = await db
+        .collection("applications")
+        .find({
+          studentEmail: user.email.toLowerCase(),
+        })
+        .sort({ appliedAt: -1 })
+        .toArray();
+
+      return res.status(200).json({
+        success: true,
+        count: applications.length,
+        data: applications,
+      });
+    } catch (error) {
+      console.error("Fetch student applications error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to load your applications.",
+      });
+    }
+  });
+
+  // DELETE /api/applications/:id
+  // Cancel an application only if it belongs to the student and is pending
+  router.delete("/:id", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req, auth);
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Please sign in to cancel an application.",
+        });
+      }
+
+      if (user.role !== "student") {
+        return res.status(403).json({
+          success: false,
+          message: "Only students can cancel their applications.",
+        });
+      }
+
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid application ID.",
+        });
+      }
+
+      const db = getDB();
+
+      const result = await db.collection("applications").deleteOne({
+        _id: new ObjectId(id),
+        studentEmail: user.email.toLowerCase(),
+        status: "pending",
+      });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Application not found, or it can no longer be cancelled.",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Your application has been cancelled successfully.",
+      });
+    } catch (error) {
+      console.error("Cancel application error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to cancel your application.",
+      });
+    }
+  });
+
   return router;
 }
+
