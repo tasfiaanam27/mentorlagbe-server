@@ -13,6 +13,7 @@ import stripeRoutes, {
 } from "./routes/stripe.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import tutorRoutes from "./routes/tutor.js";
+import tutorApplicantsRoutes from "./routes/tutorApplicants.js";
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ const startServer = async () => {
     app.use(express.json({ limit: "10mb" }));
     app.use("/api/dashboard", dashboardRoutes(auth));
     app.use("/api/tutor", tutorRoutes(auth));
+    app.use("/api/tutor-applicants", tutorApplicantsRoutes(auth));
 
     // Root route
     app.get("/", (req, res) => {
