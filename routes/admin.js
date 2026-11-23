@@ -1,49 +1,18 @@
+
 import express from "express";
 import { ObjectId } from "mongodb";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
+import { verifyToken, verifyAdmin } from "../middleware/auth.js";
 
-export default function adminRoutes(auth) {
+export default function adminRoutes() {
   const router = express.Router();
 
-  async function getAdmin(req) {
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    const user = session?.user;
-
-    if (!user) return { error: "unauthenticated" };
-    if (user.role !== "admin") return { error: "forbidden" };
-
-    return { user };
-  }
-
-  function sendAuthError(res, error) {
-    if (error === "unauthenticated") {
-      return res.status(401).json({
-        success: false,
-        message: "Please sign in to access the admin dashboard.",
-      });
-    }
-
-    if (error === "forbidden") {
-      return res.status(403).json({
-        success: false,
-        message: "Admin access only.",
-      });
-    }
-
-    return null;
-  }
+  // Protect every admin endpoint using JWT and database role verification.
+  router.use(verifyToken, verifyAdmin);
 
   // GET /api/admin/overview
   router.get("/overview", async (req, res) => {
     try {
-      const authResult = await getAdmin(req);
-      const authError = sendAuthError(res, authResult.error);
-      if (authError) return authError;
-
       const db = getDB();
 
       const [
@@ -108,10 +77,6 @@ export default function adminRoutes(auth) {
   // GET /api/admin/users
   router.get("/users", async (req, res) => {
     try {
-      const authResult = await getAdmin(req);
-      const authError = sendAuthError(res, authResult.error);
-      if (authError) return authError;
-
       const users = await getDB()
         .collection("users")
         .find(
@@ -149,10 +114,6 @@ export default function adminRoutes(auth) {
   // PATCH /api/admin/users/:id/role
   router.patch("/users/:id/role", async (req, res) => {
     try {
-      const authResult = await getAdmin(req);
-      const authError = sendAuthError(res, authResult.error);
-      if (authError) return authError;
-
       const { id } = req.params;
       const { role } = req.body || {};
 
@@ -183,9 +144,8 @@ export default function adminRoutes(auth) {
       }
 
       if (
-        String(targetUser._id) === String(authResult.user.id) ||
-        targetUser.email?.toLowerCase() ===
-          authResult.user.email?.toLowerCase()
+        String(targetUser._id) === String(req.user.id) ||
+        targetUser.email?.toLowerCase() === req.user.email?.toLowerCase()
       ) {
         return res.status(400).json({
           success: false,
@@ -242,13 +202,8 @@ export default function adminRoutes(auth) {
   });
 
   // GET /api/admin/tuitions
-  // Fetch every tuition post, regardless of approval or active status.
   router.get("/tuitions", async (req, res) => {
     try {
-      const authResult = await getAdmin(req);
-      const authError = sendAuthError(res, authResult.error);
-      if (authError) return authError;
-
       const tuitions = await getDB()
         .collection("tuitions")
         .find({})
@@ -270,13 +225,8 @@ export default function adminRoutes(auth) {
   });
 
   // PATCH /api/admin/tuitions/:id/approval
-  // Approve or reject a tuition post.
   router.patch("/tuitions/:id/approval", async (req, res) => {
     try {
-      const authResult = await getAdmin(req);
-      const authError = sendAuthError(res, authResult.error);
-      if (authError) return authError;
-
       const { id } = req.params;
       const { approvalStatus } = req.body || {};
 
@@ -324,7 +274,7 @@ export default function adminRoutes(auth) {
           $set: {
             approvalStatus,
             reviewedAt: new Date(),
-            reviewedBy: authResult.user.email,
+            reviewedBy: req.user.email,
           },
         }
       );
