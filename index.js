@@ -23,6 +23,7 @@ import {
     verifyToken,
     verifyStudent,
     verifyTutor,
+    verifyAdmin,
 } from "./middleware/auth.js";
 
 dotenv.config();
@@ -90,6 +91,14 @@ const startServer = async () => {
             verifyTutor
         );
 
+        // ADMIN: JWT authentication and admin role verification.
+        // Protect all endpoints beginning with /api/admin.
+        app.use(
+            "/api/admin",
+            verifyToken,
+            verifyAdmin
+        );
+
         // Dashboard routes
         app.use("/api/dashboard", dashboardRoutes(auth));
 
@@ -97,7 +106,7 @@ const startServer = async () => {
         app.use("/api/tutor", tutorRoutes(auth));
         app.use("/api/tutor-applicants", tutorApplicantsRoutes(auth));
 
-        // Admin routes (we will secure these next).
+        // Admin routes
         app.use("/api/admin", adminRoutes(auth));
         app.use("/api/admin/transactions", adminTransactionsRoutes(auth));
 
@@ -164,4 +173,3 @@ const startServer = async () => {
 };
 
 startServer();
-
