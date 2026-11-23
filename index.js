@@ -1,3 +1,4 @@
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -21,6 +22,7 @@ import profileRoutes from "./routes/profile.js";
 import {
     verifyToken,
     verifyStudent,
+    verifyTutor,
 } from "./middleware/auth.js";
 
 dotenv.config();
@@ -59,12 +61,33 @@ const startServer = async () => {
 
         app.use(express.json({ limit: "10mb" }));
 
-        // JWT-protected student application routes.
-        // Both a valid JWT and the student role are required.
+        // STUDENT: JWT authentication and student role verification.
         app.use(
             "/api/applications",
             verifyToken,
             verifyStudent
+        );
+
+        // TUTOR: JWT authentication and tutor role verification.
+        // Protect tutor dashboard statistics.
+        app.use(
+            "/api/dashboard/tutor",
+            verifyToken,
+            verifyTutor
+        );
+
+        // Protect tutor tuition management endpoints.
+        app.use(
+            "/api/tutor",
+            verifyToken,
+            verifyTutor
+        );
+
+        // Protect tutor applicant management endpoints.
+        app.use(
+            "/api/tutor-applicants",
+            verifyToken,
+            verifyTutor
         );
 
         // Dashboard routes
@@ -74,7 +97,7 @@ const startServer = async () => {
         app.use("/api/tutor", tutorRoutes(auth));
         app.use("/api/tutor-applicants", tutorApplicantsRoutes(auth));
 
-        // Admin routes
+        // Admin routes (we will secure these next).
         app.use("/api/admin", adminRoutes(auth));
         app.use("/api/admin/transactions", adminTransactionsRoutes(auth));
 
@@ -122,7 +145,7 @@ const startServer = async () => {
             }
         });
 
-        // Tuition routes
+        // Public tuition routes
         app.use("/api/tuitions", tuitionRoutes);
 
         // Application routes
@@ -141,3 +164,4 @@ const startServer = async () => {
 };
 
 startServer();
+
