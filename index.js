@@ -14,6 +14,7 @@ import stripeRoutes, {
 import dashboardRoutes from "./routes/dashboard.js";
 import tutorRoutes from "./routes/tutor.js";
 import tutorApplicantsRoutes from "./routes/tutorApplicants.js";
+import adminRoutes from "./routes/admin.js";
 
 dotenv.config();
 
@@ -54,6 +55,7 @@ const startServer = async () => {
     app.use("/api/dashboard", dashboardRoutes(auth));
     app.use("/api/tutor", tutorRoutes(auth));
     app.use("/api/tutor-applicants", tutorApplicantsRoutes(auth));
+    app.use("/api/admin", adminRoutes(auth));
 
     // Root route
     app.get("/", (req, res) => {
