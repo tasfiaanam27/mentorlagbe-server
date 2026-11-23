@@ -12,6 +12,7 @@ import stripeRoutes, {
   createStripeWebhookHandler,
 } from "./routes/stripe.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import tutorRoutes from "./routes/tutor.js";
 
 dotenv.config();
 
@@ -48,8 +49,9 @@ const startServer = async () => {
     // BetterAuth handler must come before express.json().
     app.all("/api/auth/*", toNodeHandler(auth));
 
-    app.use(express.json());
+    app.use(express.json({ limit: "10mb" }));
     app.use("/api/dashboard", dashboardRoutes(auth));
+    app.use("/api/tutor", tutorRoutes(auth));
 
     // Root route
     app.get("/", (req, res) => {
