@@ -4,70 +4,72 @@ import { jwt } from "better-auth/plugins";
 import { getDB } from "./db.js";
 
 export const createAuth = () => {
-  return betterAuth({
-    database: mongodbAdapter(getDB()),
+    return betterAuth({
+        database: mongodbAdapter(getDB()),
 
-    baseURL: process.env.BETTER_AUTH_URL,
-    secret: process.env.BETTER_AUTH_SECRET,
+        baseURL: process.env.BETTER_AUTH_URL,
+        secret: process.env.BETTER_AUTH_SECRET,
 
-    trustedOrigins: [process.env.CLIENT_URL],
+        trustedOrigins: [process.env.CLIENT_URL],
 
-    emailAndPassword: {
-      enabled: true,
-      minPasswordLength: 8,
-      autoSignIn: true,
-    },
-
-    user: {
-      modelName: "users",
-      additionalFields: {
-        role: {
-          type: "string",
-          required: true,
-          defaultValue: "student",
-          input: true,
+        emailAndPassword: {
+            enabled: true,
+            minPasswordLength: 8,
+            autoSignIn: true,
         },
-        plan: {
-          type: "string",
-          required: true,
-          defaultValue: "free",
-          input: false,
-        },
-        phone: {
-          type: "string",
-          required: false,
-          input: false,
-        },
-        bio: {
-          type: "string",
-          required: false,
-          input: false,
-        },
-      },
-    },
 
-    session: {
-      modelName: "sessions",
-    },
-
-    account: {
-      modelName: "accounts",
-    },
-
-    verification: {
-      modelName: "verifications",
-    },
-
-    plugins: [
-      jwt({
-        jwt: {
-          definePayload: ({ user }) => ({
-            id: user.id,
-            email: user.email,
-            role: user.role,
-          }),
+        user: {
+            modelName: "users",
+            additionalFields: {
+                role: {
+                    type: "string",
+                    required: true,
+                    defaultValue: "student",
+                    input: true,
+                },
+                plan: {
+                    type: "string",
+                    required: true,
+                    defaultValue: "free",
+                    input: false,
+                },
+                phone: {
+                    type: "string",
+                    required: false,
+                    input: false,
+                },
+                bio: {
+                    type: "string",
+                    required: false,
+                    input: false,
+                },
+            },
         },
-      }),
-    ],
-  });
+
+        session: {
+            modelName: "sessions",
+        },
+
+        account: {
+            modelName: "accounts",
+        },
+
+        verification: {
+            modelName: "verifications",
+        },
+
+        plugins: [
+            jwt({
+                jwt: {
+                    issuer: process.env.BETTER_AUTH_URL,
+                    audience: process.env.BETTER_AUTH_URL,
+                    definePayload: ({ user }) => ({
+                        id: user.id,
+                        email: user.email,
+                        role: user.role,
+                    }),
+                },
+            }),
+        ],
+    });
 };

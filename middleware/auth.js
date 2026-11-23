@@ -1,7 +1,8 @@
+
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { getDB } from "../config/db.js";
 
-const AUTH_URL = process.env.BETTER_AUTH_URL?.replace(/\/$/, "");
+const AUTH_URL = process.env.BETTER_AUTH_URL?.replace(/\/+$/, "");
 
 if (!AUTH_URL) {
   throw new Error("BETTER_AUTH_URL is not configured.");
@@ -13,7 +14,7 @@ const JWKS = createRemoteJWKSet(
 
 /**
  * Verify the JWT supplied through the Authorization header.
- * Also retrieve the current user from MongoDB so role changes
+ * Retrieve the current user from MongoDB so role changes
  * take effect without trusting an old role claim.
  */
 export const verifyToken = async (req, res, next) => {
@@ -27,7 +28,7 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    const token = authorization.split(" ")[1];
+    const token = authorization.slice(7).trim();
 
     if (!token) {
       return res.status(401).json({
@@ -42,6 +43,11 @@ export const verifyToken = async (req, res, next) => {
     });
 
     if (!payload.sub || !payload.email) {
+      console.error("JWT payload missing required fields:", {
+        hasSub: Boolean(payload.sub),
+        hasEmail: Boolean(payload.email),
+      });
+
       return res.status(401).json({
         success: false,
         message: "Invalid token payload.",
@@ -55,6 +61,8 @@ export const verifyToken = async (req, res, next) => {
     });
 
     if (!user) {
+      console.error("JWT verified, but user was not found:", payload.email);
+
       return res.status(401).json({
         success: false,
         message: "User account not found.",
@@ -63,7 +71,7 @@ export const verifyToken = async (req, res, next) => {
 
     // Use the current MongoDB role, not an old JWT role claim.
     req.user = {
-      id: user._id.toString(),
+      id: user._id?.toString() || user.id,
       email: user.email,
       name: user.name,
       role: user.role,
@@ -74,7 +82,11 @@ export const verifyToken = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("JWT verification failed:", error.message);
+    console.error("JWT verification failed:", {
+      message: error.message,
+      code: error.code,
+      name: error.name,
+    });
 
     return res.status(401).json({
       success: false,
