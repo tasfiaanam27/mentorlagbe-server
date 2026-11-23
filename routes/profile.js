@@ -1,17 +1,12 @@
-import express from "express";
-import { fromNodeHeaders } from "better-auth/node";
-import { getDB } from "../config/db.js";
 
-export default function profileRoutes(auth) {
+import express from "express";
+import { getDB } from "../config/db.js";
+import { verifyToken } from "../middleware/auth.js";
+
+export default function profileRoutes() {
   const router = express.Router();
 
-  async function getAuthenticatedUser(req) {
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    return session?.user || null;
-  }
+  router.use(verifyToken);
 
   async function uploadToImgBB(base64Image) {
     const apiKey = process.env.IMGBB_API_KEY;
@@ -50,14 +45,7 @@ export default function profileRoutes(auth) {
   // Retrieve the currently signed-in user's profile.
   router.get("/", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view your profile.",
-        });
-      }
+      const user = req.user;
 
       const profile = await getDB().collection("users").findOne(
         { email: user.email },
@@ -100,14 +88,7 @@ export default function profileRoutes(auth) {
   // Update the currently signed-in user's profile.
   router.patch("/", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to update your profile.",
-        });
-      }
+      const user = req.user;
 
       const {
         name,
@@ -184,7 +165,8 @@ export default function profileRoutes(auth) {
         if (imageBase64.length > 8 * 1024 * 1024) {
           return res.status(413).json({
             success: false,
-            message: "Profile image is too large. Please choose a smaller image.",
+            message:
+              "Profile image is too large. Please choose a smaller image.",
           });
         }
 
@@ -216,7 +198,8 @@ export default function profileRoutes(auth) {
           } catch {
             return res.status(400).json({
               success: false,
-              message: "Please provide a valid HTTP or HTTPS image URL.",
+              message:
+                "Please provide a valid HTTP or HTTPS image URL.",
             });
           }
 

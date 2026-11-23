@@ -1,17 +1,10 @@
+
 import express from "express";
 import { ObjectId } from "mongodb";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
+import { verifyToken, verifyTutor } from "../middleware/auth.js";
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-
-async function getAuthenticatedUser(req, auth) {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
-
-  return session?.user || null;
-}
 
 async function uploadToImgBB(imageBase64) {
   if (!process.env.IMGBB_API_KEY) {
@@ -97,30 +90,18 @@ async function getOwnedTuition(db, id, tutorEmail) {
   });
 }
 
-export default function tutorRoutes(auth) {
+export default function tutorRoutes() {
   const router = express.Router();
+
+  router.use(verifyToken, verifyTutor);
 
   // POST /api/tutor/tuitions
   // Create a new tuition listing
   router.post("/tuitions", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to post a tuition.",
-        });
-      }
-
-      if (user.role !== "tutor") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can post tuitions.",
-        });
-      }
-
+      const user = req.user;
       const fields = req.body || {};
+
       const validationError = validateTuitionFields(fields);
 
       if (validationError) {
@@ -238,27 +219,11 @@ export default function tutorRoutes(auth) {
   // Get all tuition listings created by the logged-in tutor
   router.get("/tuitions", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view your tuitions.",
-        });
-      }
-
-      if (user.role !== "tutor") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can view their tuition listings.",
-        });
-      }
-
       const db = getDB();
 
       const tuitions = await db
         .collection("tuitions")
-        .find({ tutorEmail: user.email.toLowerCase() })
+        .find({ tutorEmail: req.user.email.toLowerCase() })
         .sort({ createdAt: -1 })
         .toArray();
 
@@ -281,23 +246,7 @@ export default function tutorRoutes(auth) {
   // Edit tuition details or toggle Active/Closed
   router.patch("/tuitions/:id", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to update a tuition.",
-        });
-      }
-
-      if (user.role !== "tutor") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can update tuitions.",
-        });
-      }
-
-      const tutorEmail = user.email.toLowerCase();
+      const tutorEmail = req.user.email.toLowerCase();
       const db = getDB();
 
       const existingTuition = await getOwnedTuition(
@@ -432,24 +381,8 @@ export default function tutorRoutes(auth) {
   // Delete only the logged-in tutor's own tuition
   router.delete("/tuitions/:id", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to delete a tuition.",
-        });
-      }
-
-      if (user.role !== "tutor") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can delete tuitions.",
-        });
-      }
-
       const db = getDB();
-      const tutorEmail = user.email.toLowerCase();
+      const tutorEmail = req.user.email.toLowerCase();
 
       if (!ObjectId.isValid(req.params.id)) {
         return res.status(400).json({

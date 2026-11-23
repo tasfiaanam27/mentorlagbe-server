@@ -1,54 +1,20 @@
+
 import express from "express";
 import { ObjectId } from "mongodb";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
+import { verifyToken, verifyTutor } from "../middleware/auth.js";
 
-export default function tutorApplicantsRoutes(auth) {
+export default function tutorApplicantsRoutes() {
   const router = express.Router();
 
-  async function getAuthenticatedTutor(req) {
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    const user = session?.user;
-
-    if (!user) {
-      return { error: "unauthenticated" };
-    }
-
-    if (user.role !== "tutor") {
-      return { error: "forbidden" };
-    }
-
-    return {
-      user,
-      email: user.email.toLowerCase(),
-    };
-  }
+  router.use(verifyToken, verifyTutor);
 
   // GET /api/tutor-applicants
   // Retrieve applications submitted to the logged-in tutor.
   router.get("/", async (req, res) => {
     try {
-      const authResult = await getAuthenticatedTutor(req);
-
-      if (authResult.error === "unauthenticated") {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view applicants.",
-        });
-      }
-
-      if (authResult.error === "forbidden") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can view applicants.",
-        });
-      }
-
+      const tutorEmail = req.user.email.toLowerCase();
       const db = getDB();
-      const tutorEmail = authResult.email;
 
       const applications = await db
         .collection("applications")
@@ -75,22 +41,6 @@ export default function tutorApplicantsRoutes(auth) {
   // Accept or reject an application belonging to this tutor.
   router.patch("/:id", async (req, res) => {
     try {
-      const authResult = await getAuthenticatedTutor(req);
-
-      if (authResult.error === "unauthenticated") {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to manage applicants.",
-        });
-      }
-
-      if (authResult.error === "forbidden") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can manage applicants.",
-        });
-      }
-
       const { id } = req.params;
       const { status } = req.body || {};
 
@@ -108,8 +58,8 @@ export default function tutorApplicantsRoutes(auth) {
         });
       }
 
+      const tutorEmail = req.user.email.toLowerCase();
       const db = getDB();
-      const tutorEmail = authResult.email;
 
       const application = await db.collection("applications").findOne({
         _id: new ObjectId(id),
@@ -144,12 +94,10 @@ export default function tutorApplicantsRoutes(auth) {
         }
       );
 
-      const updatedApplication = await db
-        .collection("applications")
-        .findOne({
-          _id: application._id,
-          tutorEmail,
-        });
+      const updatedApplication = await db.collection("applications").findOne({
+        _id: application._id,
+        tutorEmail,
+      });
 
       return res.status(200).json({
         success: true,
