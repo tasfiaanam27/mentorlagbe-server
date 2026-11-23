@@ -1,30 +1,17 @@
-import express from "express";
-import { fromNodeHeaders } from "better-auth/node";
-import { getDB } from "../config/db.js";
 
-export default function adminTransactionsRoutes(auth) {
+import express from "express";
+import { getDB } from "../config/db.js";
+import { verifyToken, verifyAdmin } from "../middleware/auth.js";
+
+export default function adminTransactionsRoutes() {
   const router = express.Router();
 
+  router.use(verifyToken, verifyAdmin);
+
+  // GET /api/admin-transactions
+  // Retrieve all successful payments for the admin dashboard.
   router.get("/", async (req, res) => {
     try {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-      });
-
-      if (!session?.user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view transactions.",
-        });
-      }
-
-      if (session.user.role !== "admin") {
-        return res.status(403).json({
-          success: false,
-          message: "Admin access only.",
-        });
-      }
-
       const payments = await getDB()
         .collection("payments")
         .find(
@@ -64,3 +51,4 @@ export default function adminTransactionsRoutes(auth) {
 
   return router;
 }
+

@@ -1,16 +1,7 @@
+
 import express from "express";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
-
-const router = express.Router();
-
-const getAuthenticatedUser = async (req, auth) => {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
-
-  return session?.user || null;
-};
+import { verifyToken } from "../middleware/auth.js";
 
 const getSubscriptionId = (invoice) => {
   const subscription =
@@ -33,7 +24,9 @@ const fulfillCheckoutSession = async (checkoutSession) => {
     checkoutSession.mode !== "subscription" ||
     checkoutSession.payment_status !== "paid"
   ) {
-    throw new Error("Checkout session is not a successfully paid subscription.");
+    throw new Error(
+      "Checkout session is not a successfully paid subscription."
+    );
   }
 
   const email = (
@@ -57,7 +50,9 @@ const fulfillCheckoutSession = async (checkoutSession) => {
   const user = await users.findOne({ email, role });
 
   if (!user) {
-    throw new Error("The account associated with this payment was not found.");
+    throw new Error(
+      "The account associated with this payment was not found."
+    );
   }
 
   const existingPayment = await payments.findOne({
@@ -91,8 +86,7 @@ const fulfillCheckoutSession = async (checkoutSession) => {
 };
 
 // Record successful recurring invoices.
-// The initial subscription invoice is already recorded through Checkout,
-// so only subscription_cycle invoices are recorded here.
+// The initial subscription invoice is recorded through Checkout.
 const recordRenewalPayment = async (invoice, stripe) => {
   if (invoice.billing_reason !== "subscription_cycle") {
     return;
@@ -123,7 +117,6 @@ const recordRenewalPayment = async (invoice, stripe) => {
     throw new Error("User account for this renewal was not found.");
   }
 
-  // Use an invoice-specific key to prevent duplicate renewal records.
   const renewalKey = `invoice_${invoice.id}`;
 
   const existingPayment = await payments.findOne({
@@ -141,7 +134,9 @@ const recordRenewalPayment = async (invoice, stripe) => {
       transactionId: invoice.payment_intent || invoice.id,
       stripeSessionId: renewalKey,
       paymentStatus: "paid",
-      paidAt: new Date((invoice.status_transitions?.paid_at || invoice.created) * 1000),
+      paidAt: new Date(
+        (invoice.status_transitions?.paid_at || invoice.created) * 1000
+      ),
     });
   }
 
@@ -162,14 +157,15 @@ const handleFailedInvoice = async (invoice, stripe) => {
 
   if (!email || !["student", "tutor"].includes(role)) return;
 
-  // Revoke Pro access while the subscription payment is unpaid.
-  // A later successful renewal can restore Pro access.
   await getDB().collection("users").updateOne(
     { email, role },
     { $set: { plan: "free" } }
   );
 
-  console.log("Subscription payment failed; Pro access revoked for:", email);
+  console.log(
+    "Subscription payment failed; Pro access revoked for:",
+    email
+  );
 };
 
 const handleDeletedSubscription = async (subscription) => {
@@ -187,16 +183,15 @@ const handleDeletedSubscription = async (subscription) => {
 };
 
 export default (auth, stripe) => {
+  const router = express.Router();
+
+  // Protected endpoints use JWT authentication.
+  router.use(verifyToken);
+
+  // POST /create-checkout-session
   router.post("/create-checkout-session", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in before subscribing.",
-        });
-      }
+      const user = req.user;
 
       if (!["student", "tutor"].includes(user.role)) {
         return res.status(403).json({
@@ -264,27 +259,32 @@ export default (auth, stripe) => {
     }
   });
 
+  // GET /verify-session
   router.get("/verify-session", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
+      const user = req.user;
 
-      if (!user) {
-        return res.status(401).json({
+      if (!["student", "tutor"].includes(user.role)) {
+        return res.status(403).json({
           success: false,
-          message: "Please sign in to verify your payment.",
+          message: "Only students and tutors can verify subscriptions.",
         });
       }
 
       const sessionId = req.query.session_id;
 
-      if (typeof sessionId !== "string" || !sessionId.startsWith("cs_")) {
+      if (
+        typeof sessionId !== "string" ||
+        !sessionId.startsWith("cs_")
+      ) {
         return res.status(400).json({
           success: false,
           message: "A valid Checkout Session ID is required.",
         });
       }
 
-      const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
+      const checkoutSession =
+        await stripe.checkout.sessions.retrieve(sessionId);
 
       const sessionEmail = (
         checkoutSession.metadata?.userEmail ||
@@ -330,6 +330,7 @@ export default (auth, stripe) => {
   return router;
 };
 
+// Stripe webhook handler: deliberately does not use JWT authentication.
 export const createStripeWebhookHandler = (stripe) => {
   return async (req, res) => {
     const signature = req.headers["stripe-signature"];
@@ -348,7 +349,11 @@ export const createStripeWebhookHandler = (stripe) => {
         webhookSecret
       );
     } catch (error) {
-      console.error("Stripe webhook signature verification failed:", error.message);
+      console.error(
+        "Stripe webhook signature verification failed:",
+        error.message
+      );
+
       return res.status(400).send(`Webhook Error: ${error.message}`);
     }
 
