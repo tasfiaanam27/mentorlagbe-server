@@ -1,6 +1,6 @@
-
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
+import { jwt } from "better-auth/plugins";
 import { getDB } from "./db.js";
 
 export const createAuth = () => {
@@ -46,8 +46,28 @@ export const createAuth = () => {
       },
     },
 
-    session: { modelName: "sessions" },
-    account: { modelName: "accounts" },
-    verification: { modelName: "verifications" },
+    session: {
+      modelName: "sessions",
+    },
+
+    account: {
+      modelName: "accounts",
+    },
+
+    verification: {
+      modelName: "verifications",
+    },
+
+    plugins: [
+      jwt({
+        jwt: {
+          definePayload: ({ user }) => ({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+          }),
+        },
+      }),
+    ],
   });
 };
