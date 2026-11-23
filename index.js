@@ -16,6 +16,7 @@ import tutorRoutes from "./routes/tutor.js";
 import tutorApplicantsRoutes from "./routes/tutorApplicants.js";
 import adminRoutes from "./routes/admin.js";
 import adminTransactionsRoutes from "./routes/adminTransactions.js";
+import profileRoutes from "./routes/profile.js";
 
 dotenv.config();
 
@@ -58,6 +59,7 @@ const startServer = async () => {
     app.use("/api/tutor-applicants", tutorApplicantsRoutes(auth));
     app.use("/api/admin", adminRoutes(auth));
     app.use("/api/admin/transactions", adminTransactionsRoutes(auth));
+    app.use("/api/profile", profileRoutes(auth));
 
     // Root route
     app.get("/", (req, res) => {
