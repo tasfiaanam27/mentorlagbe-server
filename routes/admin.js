@@ -13,13 +13,8 @@ export default function adminRoutes(auth) {
 
     const user = session?.user;
 
-    if (!user) {
-      return { error: "unauthenticated" };
-    }
-
-    if (user.role !== "admin") {
-      return { error: "forbidden" };
-    }
+    if (!user) return { error: "unauthenticated" };
+    if (user.role !== "admin") return { error: "forbidden" };
 
     return { user };
   }
@@ -47,7 +42,6 @@ export default function adminRoutes(auth) {
     try {
       const authResult = await getAdmin(req);
       const authError = sendAuthError(res, authResult.error);
-
       if (authError) return authError;
 
       const db = getDB();
@@ -104,7 +98,6 @@ export default function adminRoutes(auth) {
       });
     } catch (error) {
       console.error("Admin overview error:", error);
-
       return res.status(500).json({
         success: false,
         message: "Failed to load admin dashboard statistics.",
@@ -113,17 +106,14 @@ export default function adminRoutes(auth) {
   });
 
   // GET /api/admin/users
-  // Return registered users without exposing authentication credentials.
   router.get("/users", async (req, res) => {
     try {
       const authResult = await getAdmin(req);
       const authError = sendAuthError(res, authResult.error);
-
       if (authError) return authError;
 
-      const db = getDB();
-
-      const users = await db.collection("users")
+      const users = await getDB()
+        .collection("users")
         .find(
           {},
           {
@@ -149,7 +139,6 @@ export default function adminRoutes(auth) {
       });
     } catch (error) {
       console.error("Admin users fetch error:", error);
-
       return res.status(500).json({
         success: false,
         message: "Failed to load users.",
@@ -158,12 +147,10 @@ export default function adminRoutes(auth) {
   });
 
   // PATCH /api/admin/users/:id/role
-  // Update a registered user's role.
   router.patch("/users/:id/role", async (req, res) => {
     try {
       const authResult = await getAdmin(req);
       const authError = sendAuthError(res, authResult.error);
-
       if (authError) return authError;
 
       const { id } = req.params;
@@ -176,22 +163,17 @@ export default function adminRoutes(auth) {
         });
       }
 
-      const allowedRoles = ["student", "tutor", "admin"];
-
-      if (!allowedRoles.includes(role)) {
+      if (!["student", "tutor", "admin"].includes(role)) {
         return res.status(400).json({
           success: false,
           message: "Role must be student, tutor, or admin.",
         });
       }
 
-      const db = getDB();
-      const usersCollection = db.collection("users");
+      const usersCollection = getDB().collection("users");
       const userId = new ObjectId(id);
 
-      const targetUser = await usersCollection.findOne({
-        _id: userId,
-      });
+      const targetUser = await usersCollection.findOne({ _id: userId });
 
       if (!targetUser) {
         return res.status(404).json({
@@ -200,7 +182,6 @@ export default function adminRoutes(auth) {
         });
       }
 
-      // Prevent an admin from accidentally changing their own role.
       if (
         String(targetUser._id) === String(authResult.user.id) ||
         targetUser.email?.toLowerCase() ===
@@ -212,7 +193,6 @@ export default function adminRoutes(auth) {
         });
       }
 
-      // Prevent removing the final administrator.
       if (targetUser.role === "admin" && role !== "admin") {
         const adminCount = await usersCollection.countDocuments({
           role: "admin",
@@ -228,12 +208,7 @@ export default function adminRoutes(auth) {
 
       await usersCollection.updateOne(
         { _id: userId },
-        {
-          $set: {
-            role,
-            updatedAt: new Date(),
-          },
-        }
+        { $set: { role, updatedAt: new Date() } }
       );
 
       const updatedUser = await usersCollection.findOne(
@@ -259,10 +234,115 @@ export default function adminRoutes(auth) {
       });
     } catch (error) {
       console.error("Admin role update error:", error);
-
       return res.status(500).json({
         success: false,
         message: "Failed to update user role.",
+      });
+    }
+  });
+
+  // GET /api/admin/tuitions
+  // Fetch every tuition post, regardless of approval or active status.
+  router.get("/tuitions", async (req, res) => {
+    try {
+      const authResult = await getAdmin(req);
+      const authError = sendAuthError(res, authResult.error);
+      if (authError) return authError;
+
+      const tuitions = await getDB()
+        .collection("tuitions")
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      return res.status(200).json({
+        success: true,
+        count: tuitions.length,
+        data: tuitions,
+      });
+    } catch (error) {
+      console.error("Admin tuitions fetch error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to load tuition posts.",
+      });
+    }
+  });
+
+  // PATCH /api/admin/tuitions/:id/approval
+  // Approve or reject a tuition post.
+  router.patch("/tuitions/:id/approval", async (req, res) => {
+    try {
+      const authResult = await getAdmin(req);
+      const authError = sendAuthError(res, authResult.error);
+      if (authError) return authError;
+
+      const { id } = req.params;
+      const { approvalStatus } = req.body || {};
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid tuition ID.",
+        });
+      }
+
+      if (!["approved", "rejected"].includes(approvalStatus)) {
+        return res.status(400).json({
+          success: false,
+          message: "Approval status must be approved or rejected.",
+        });
+      }
+
+      const tuitionsCollection = getDB().collection("tuitions");
+      const tuitionId = new ObjectId(id);
+
+      const tuition = await tuitionsCollection.findOne({
+        _id: tuitionId,
+      });
+
+      if (!tuition) {
+        return res.status(404).json({
+          success: false,
+          message: "Tuition post not found.",
+        });
+      }
+
+      if (tuition.approvalStatus !== "pending") {
+        return res.status(409).json({
+          success: false,
+          message: "Only pending tuition posts can be reviewed.",
+        });
+      }
+
+      await tuitionsCollection.updateOne(
+        {
+          _id: tuitionId,
+          approvalStatus: "pending",
+        },
+        {
+          $set: {
+            approvalStatus,
+            reviewedAt: new Date(),
+            reviewedBy: authResult.user.email,
+          },
+        }
+      );
+
+      const updatedTuition = await tuitionsCollection.findOne({
+        _id: tuitionId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Tuition ${approvalStatus} successfully.`,
+        data: updatedTuition,
+      });
+    } catch (error) {
+      console.error("Admin tuition approval error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update tuition approval status.",
       });
     }
   });
