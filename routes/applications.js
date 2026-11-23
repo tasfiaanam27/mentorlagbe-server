@@ -1,38 +1,20 @@
+
 import express from "express";
 import { ObjectId } from "mongodb";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
+import { verifyToken, verifyStudent } from "../middleware/auth.js";
 
-const router = express.Router();
+export default function applicationRoutes() {
+  const router = express.Router();
 
-async function getAuthenticatedUser(req, auth) {
-  const session = await auth.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
+  // All application routes require an authenticated student.
+  router.use(verifyToken, verifyStudent);
 
-  return session?.user || null;
-}
-
-export default function applicationRoutes(auth) {
   // POST /api/applications
   // Submit a tuition application
   router.post("/", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to apply for a tuition.",
-        });
-      }
-
-      if (user.role !== "student") {
-        return res.status(403).json({
-          success: false,
-          message: "Only students can apply for tuitions.",
-        });
-      }
+      const user = req.user;
 
       const {
         tuitionId,
@@ -124,22 +106,7 @@ export default function applicationRoutes(auth) {
   // Fetch all applications belonging to the logged-in student
   router.get("/my-applications", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view your applications.",
-        });
-      }
-
-      if (user.role !== "student") {
-        return res.status(403).json({
-          success: false,
-          message: "Only students can view their applications.",
-        });
-      }
-
+      const user = req.user;
       const db = getDB();
 
       const applications = await db
@@ -150,7 +117,7 @@ export default function applicationRoutes(auth) {
         .sort({ appliedAt: -1 })
         .toArray();
 
-      // Retrieve the registered tutor names and emails.
+      // Retrieve registered tutor names and emails.
       const tutorEmails = [
         ...new Set(
           applications
@@ -201,22 +168,7 @@ export default function applicationRoutes(auth) {
   // Cancel only the logged-in student's pending application
   router.delete("/:id", async (req, res) => {
     try {
-      const user = await getAuthenticatedUser(req, auth);
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to cancel an application.",
-        });
-      }
-
-      if (user.role !== "student") {
-        return res.status(403).json({
-          success: false,
-          message: "Only students can cancel their applications.",
-        });
-      }
-
+      const user = req.user;
       const { id } = req.params;
 
       if (!ObjectId.isValid(id)) {

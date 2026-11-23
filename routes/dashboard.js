@@ -1,33 +1,20 @@
+
 import express from "express";
-import { fromNodeHeaders } from "better-auth/node";
 import { getDB } from "../config/db.js";
+import { verifyToken, verifyTutor } from "../middleware/auth.js";
 
-const router = express.Router();
+export default function dashboardRoutes() {
+  const router = express.Router();
 
-export default function dashboardRoutes(auth) {
+  // All tutor dashboard routes require an authenticated tutor.
+  router.use(verifyToken, verifyTutor);
+
   // GET /api/dashboard/tutor
   router.get("/tutor", async (req, res) => {
     try {
-      const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-      });
-
-      if (!session?.user) {
-        return res.status(401).json({
-          success: false,
-          message: "Please sign in to view your dashboard.",
-        });
-      }
-
-      if (session.user.role !== "tutor") {
-        return res.status(403).json({
-          success: false,
-          message: "Only tutors can access this dashboard.",
-        });
-      }
-
+      const user = req.user;
       const db = getDB();
-      const tutorEmail = session.user.email.toLowerCase();
+      const tutorEmail = user.email.toLowerCase();
 
       const [totalTuitions, activeTuitions, totalApplicants] =
         await Promise.all([
@@ -52,8 +39,8 @@ export default function dashboardRoutes(auth) {
           totalTuitions,
           activeTuitions,
           totalApplicants,
-          plan: session.user.plan || "free",
-          tutorName: session.user.name,
+          plan: user.plan || "free",
+          tutorName: user.name,
         },
       });
     } catch (error) {
@@ -68,3 +55,4 @@ export default function dashboardRoutes(auth) {
 
   return router;
 }
+
